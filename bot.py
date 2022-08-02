@@ -5,9 +5,6 @@ import random
 import json
 import telebot
 
-# * learn about servers (heroku)
-# * try to load code to server
-# * check full work 
 ids = [1020377332, 1317232899, 1040346700, 1075074256, 1074790633, 
     1075074257, 1074790225, 1074790454, 1040346953, 1071831436,
     1072859143, 1072859144, 1072859146, 1049305647, 1071828029, 
