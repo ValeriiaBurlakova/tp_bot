@@ -92,7 +92,6 @@ def help(message):
         commands += '''
 
 <b>Команды для админа:</b>
-/send_code_to_all_members Отправить игровой код всем участникам
 /show_members Вывести имя и id всех участников
 /add_member Добавить участника
 /kick_member Удалить участника по id или имени'''
@@ -236,22 +235,6 @@ def kick_member_command(message):
     if is_admin(id):
         user_name_id = bot.reply_to(message, "Введи ID или имя")
         bot.register_next_step_handler(user_name_id, kick_member)
-
-@bot.message_handler(commands=['send_code_to_all_members'])
-def send_code_to_all_members_command(message):
-    id = str(message.from_user.id)
-    if is_admin(id):
-        code = bot.reply_to(message, "Введи код")
-        bot.register_next_step_handler(code, send_code_to_all_members)
-
-def send_code_to_all_members(message):
-    try:
-        code = message.text.strip()
-        get_members()
-        for member in members.values():
-            send_code_request(message, member, code)
-    except Exception as e:
-        bot.reply_to(message, 'oooops')
 
 def kick_member(message):
     try:
