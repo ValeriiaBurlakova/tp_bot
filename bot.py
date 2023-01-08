@@ -13,6 +13,7 @@ class Role(Enum):
     SUPERUSER = "superuser"
     ADMIN = "admin"
     MEMBER = "member"
+    INVALID = "invalid"
 
 ROLE = "role"
 NAME = "name"
@@ -36,8 +37,9 @@ def update_members():
             json_file.write(json.dumps(members))
 
 def is_super_user(id):
-    return id == SUPER_USER
+    return str(id) == str(SUPER_USER)
 
+# commands for members
 @bot.message_handler(commands=['usage'])
 def usage(message):
     usage = u'''\
@@ -57,7 +59,14 @@ P.S. Описание всех команд смотри в /help'''
 def help(message):
     commands = '''\
 /help Описание команд
-/usage Описание базового алгоритма работы с ботом'''
+/usage Описание базового алгоритма работы с ботом
+/id Узнать свой id
+/add_account Добавить игровой аккаунт
+/send_code Отправить игровой код
+/show_accounts Показать аккаунты
+/delete_account Удалить один из аккаунтов
+/role Узнать свою роль'''
+
     id = message.from_user.id
     if is_super_user(id):
         commands += '''
@@ -74,6 +83,107 @@ def help(message):
 def start(message):
     mess = f'Привет, <b>{message.from_user.first_name}</b>!\nВведи /usage, чтобы ознакомиться с основными командами.'
     bot.send_message(message.chat.id, mess, parse_mode='html')
+
+@bot.message_handler(commands=['id'])
+def id(message):
+    bot.send_message(message.chat.id, f'Твой ID: <code>{message.from_user.id}</code>', parse_mode="HTML")
+
+@bot.message_handler(commands=['role'])
+def role(message):
+    id = str(message.from_user.id)
+    role = Role.INVALID.value
+    if is_super_user(id):
+        role = Role.SUPERUSER.value
+    elif is_admin(id):
+        role = Role.ADMIN.value
+    elif id in members:
+        role = Role.MEMBER.value
+    if role != Role.INVALID.value:
+        bot.send_message(message.chat.id, f'Ты <b>{role}</b> этого бота', parse_mode="HTML")
+
+@bot.message_handler(commands=['add_account'])
+def add_account_command(message):
+    id = str(message.from_user.id)
+    get_members()
+    if id in members or is_admin(id):
+        if is_super_user(id) and id not in members:
+            members.update({id : {ROLE: Role.SUPERUSER.value, NAME: Role.SUPERUSER.name, IDS: []}})
+            update_members()
+        account_id = bot.reply_to(message, "Введи id аккаунта Time Princess")
+        bot.register_next_step_handler(account_id, add_account, id)
+    else:
+        bot.send_message(message.chat.id, f'У Вас нет прав для этой операции, свяжитесь с администратором', parse_mode="HTML")
+
+@bot.message_handler(commands=["send_code"])
+def send_code_command(message):
+    id = str(message.from_user.id)
+    get_members()
+    if id in members:
+        code = bot.reply_to(message, "Введи код")
+        bot.register_next_step_handler(code, send_code, id)
+
+@bot.message_handler(commands=['show_accounts'])
+def show_accounts(message):
+    id = str(message.from_user.id)
+    get_members()
+    if id in members:
+        list_of_accounts = ""
+        for account in members[id][IDS]:
+            list_of_accounts += f'<code>{account}</code>\n'
+        bot.send_message(message.chat.id, list_of_accounts, parse_mode="HTML")
+
+@bot.message_handler(commands=['delete_account'])
+def delete_account_command(message):
+    id = str(message.from_user.id)
+    get_members()
+    if id in members:
+        account_id = bot.reply_to(message, "Введи id аккаунта Time Princess")
+        bot.register_next_step_handler(account_id, delete_account, id)
+    else:
+        bot.send_message(message.chat.id, f'У Вас нет прав для этой операции, свяжитесь с администратором', parse_mode="HTML")
+
+def delete_account(message, member_id):
+    try:
+        get_members()
+        account_id = message.text.strip()
+        # should be so
+        if member_id in members:
+            if account_id in members[member_id][IDS]:
+                members[member_id][IDS].remove(account_id)
+                update_members()
+                bot.send_message(message.chat.id, f'{account_id} удален', parse_mode="HTML")
+            else:
+                bot.send_message(message.chat.id, f'{account_id} не существует', parse_mode="HTML")
+        else:
+            bot.reply_to(message, 'oooops')
+    except Exception as e:
+        bot.reply_to(message, 'oooops')
+
+def send_code(message, member_id):
+    try:
+        get_members()
+        code = message.text.strip()
+        for id in members[member_id][IDS]:
+            bot.send_message(message.chat.id, f'{id} {code}: заглушка')
+    except Exception as e:
+        bot.reply_to(message, 'oooops')
+
+def add_account(message, member_id):
+    try:
+        get_members()
+        account_id = message.text.strip()
+        # should be so
+        if member_id in members:
+            if account_id in members[member_id][IDS]:
+                bot.send_message(message.chat.id, f'{account_id} уже был добавлен', parse_mode="HTML")
+            else:
+                members[member_id][IDS].append(account_id)
+                update_members()
+                bot.send_message(message.chat.id, f'{account_id} добавлен', parse_mode="HTML")
+        else:
+            bot.reply_to(message, 'oooops')
+    except Exception as e:
+        bot.reply_to(message, 'oooops')
 
 # commands for superuser
 @bot.message_handler(commands=['add_admin'])
@@ -152,24 +262,6 @@ def get_admin_name(message, id):
         bot.send_message(message.chat.id, f'Admin {id}: {admin_name} добавлен', parse_mode="HTML")
     except Exception as e:
         bot.reply_to(message, 'oooops')
-
-# @bot.message_handler()
-# def get_text(message):
-#     # this selfish bot is supposed to work only for one person
-#     if (message.from_user.id == 937341414):
-#         code = message.text
-
-#         for id in ids:
-#             # data = ('iggid={}&cdkey={}&username=&sign=0'.format(id, code)).encode('ascii')
-#             # req = request.Request(url='https://dut.igg.com/event/code', method='POST', data=data)
-
-#             # with request.urlopen(req) as f:
-#             #     # result should have format {"code": %d, "msg": %s}
-#             #     result = json.loads(f.read(100).decode('utf-8'))
-#             #     bot.send_message(message.chat.id, '{0} {1}: {2}'.format(id, code, result['msg']))
-
-#             # sleep 1-5 sec
-#             time.sleep(random.uniform(1.0, 5.0))
 
 # default handler for every other text
 @bot.message_handler(func=lambda message: True, content_types=['text'])
