@@ -5,6 +5,7 @@ import random
 import json
 import telebot
 from enum import Enum
+from threading import Lock
 
 SUPER_USER = 937341414
 bot = telebot.TeleBot('5940934648:AAGXMNGBRU4BbgLrIMVGmhq-cbgvOcTM860')
@@ -20,6 +21,9 @@ NAME = "name"
 IDS = "ids"
 
 members = None
+
+lock_update = Lock()
+lock_request = Lock()
 
 def get_members():
     global members
@@ -49,13 +53,15 @@ def send_code_request(message, member, code):
             data = ('iggid={}&cdkey={}&username=&sign=0'.format(id, code)).encode('ascii')
             req = request.Request(url='https://dut.igg.com/event/code', method='POST', data=data)
 
-            with request.urlopen(req) as f:
-                # result should have format {"code": %d, "msg": %s}
-                result = json.loads(f.read(100).decode('utf-8'))
+            with lock_request:
+                # sleep 1-5 sec
+                time.sleep(random.uniform(1.0, 5.0))
+                with request.urlopen(req) as f:
+                    # result should have format {"code": %d, "msg": %s}
+                    result = json.loads(f.read(100).decode('utf-8'))
+
                 bot.send_message(message.chat.id, '{0} {1}: {2}'.format(id, code, result['msg']))
 
-            # sleep 1-5 sec
-            time.sleep(random.uniform(1.0, 5.0))
     except Exception as e:
         bot.reply_to(message, 'oooops')
 
@@ -135,8 +141,9 @@ def add_account_command(message):
     get_members()
     if id in members or is_admin(id):
         if is_super_user(id) and id not in members:
-            members.update({id : {ROLE: Role.SUPERUSER.value, NAME: Role.SUPERUSER.name, IDS: []}})
-            update_members()
+            with lock_update:
+                members.update({id : {ROLE: Role.SUPERUSER.value, NAME: Role.SUPERUSER.name, IDS: []}})
+                update_members()
         account_id = bot.reply_to(message, "Введи id аккаунта Time Princess")
         bot.register_next_step_handler(account_id, add_account, id)
     else:
@@ -177,8 +184,9 @@ def delete_account(message, member_id):
         # should be so
         if member_id in members:
             if account_id in members[member_id][IDS]:
-                members[member_id][IDS].remove(account_id)
-                update_members()
+                with lock_update:
+                    members[member_id][IDS].remove(account_id)
+                    update_members()
                 bot.send_message(message.chat.id, f'{account_id} удален', parse_mode="HTML")
             else:
                 bot.send_message(message.chat.id, f'{account_id} не существует', parse_mode="HTML")
@@ -204,8 +212,9 @@ def add_account(message, member_id):
             if account_id in members[member_id][IDS]:
                 bot.send_message(message.chat.id, f'{account_id} уже был добавлен', parse_mode="HTML")
             else:
-                members[member_id][IDS].append(account_id)
-                update_members()
+                with lock_update:
+                    members[member_id][IDS].append(account_id)
+                    update_members()
                 bot.send_message(message.chat.id, f'{account_id} добавлен', parse_mode="HTML")
         else:
             bot.reply_to(message, 'oooops')
@@ -242,14 +251,16 @@ def kick_member(message):
         name_or_id = message.text
         is_found = False
         if name_or_id in members:
-            members.pop(name_or_id, None)
-            update_members()
+            with lock_update:
+                members.pop(name_or_id, None)
+                update_members()
             is_found = True
         else:
             for id, member in members.items():
                 if member[NAME] == name_or_id:
-                    members.pop(id, None)
-                    update_members()
+                    with lock_update:
+                        members.pop(id, None)
+                        update_members()
                     is_found = True
                     break
         if is_found:
@@ -276,8 +287,9 @@ def get_member_name(message, id):
         member_name = message.text
         get_members()
         # the check that this member already exists done on previous step
-        members.update({id: {ROLE: Role.MEMBER.value, NAME: member_name, IDS: []}})
-        update_members()
+        with lock_update:
+            members.update({id: {ROLE: Role.MEMBER.value, NAME: member_name, IDS: []}})
+            update_members()
         bot.send_message(message.chat.id, f'Участник {id}: {member_name} добавлен', parse_mode="HTML")
     except Exception as e:
         bot.reply_to(message, 'oooops')
@@ -302,8 +314,9 @@ def refresh_members(message):
     global members
     id = message.from_user.id
     if is_super_user(id):
-        members = {}
-        update_members()
+        with lock_update:
+            members = {}
+            update_members()
         bot.send_message(message.chat.id, f'Список очищен', parse_mode="HTML")
 
 @bot.message_handler(commands=['show_members_info'])
@@ -320,14 +333,16 @@ def admin_to_member(message):
         get_members()
         name_or_id = message.text
         if name_or_id in members:
-            members[name_or_id][ROLE] = Role.MEMBER.value
-            update_members()
+            with lock_update:
+                members[name_or_id][ROLE] = Role.MEMBER.value
+                update_members()
         else:
             is_found = False
             for id, member in members.items():
                 if member[NAME] == name_or_id:
-                    members[id][ROLE] = Role.MEMBER.value
-                    update_members()
+                    with lock_update:
+                        members[id][ROLE] = Role.MEMBER.value
+                        update_members()
                     is_found = True
                     break
             if not is_found:
@@ -340,8 +355,9 @@ def add_admin_id(message):
         get_members()
         id = message.text
         if id in members:
-            members[id][ROLE] = Role.ADMIN.value
-            update_members()
+            with lock_update:
+                members[id][ROLE] = Role.ADMIN.value
+                update_members()
             bot.send_message(message.chat.id, f'Admin {id}: {members[id][NAME]}', parse_mode="HTML")
         else:
             admin = bot.reply_to(message, "Введи имя")
@@ -354,8 +370,9 @@ def get_admin_name(message, id):
         admin_name = message.text
         get_members()
         # the check that this member already exists done on previous step
-        members.update({id: {ROLE: Role.ADMIN.value, NAME: admin_name, IDS: []}})
-        update_members()
+        with lock_update:
+            members.update({id: {ROLE: Role.ADMIN.value, NAME: admin_name, IDS: []}})
+            update_members()
         bot.send_message(message.chat.id, f'Admin {id}: {admin_name} добавлен', parse_mode="HTML")
     except Exception as e:
         bot.reply_to(message, 'oooops')
