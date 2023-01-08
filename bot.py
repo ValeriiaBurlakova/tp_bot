@@ -39,6 +39,17 @@ def update_members():
 def is_super_user(id):
     return str(id) == str(SUPER_USER)
 
+def is_admin(id):
+    get_members()
+    return id in members and members[id][ROLE] == Role.ADMIN or is_super_user(id)
+
+def send_code_request(message, member, code):
+    try:
+        for id in member[IDS]:
+            bot.send_message(message.chat.id, f'{id} {code}: заглушка')
+    except Exception as e:
+        bot.reply_to(message, 'oooops')
+
 # commands for members
 @bot.message_handler(commands=['usage'])
 def usage(message):
@@ -67,7 +78,16 @@ def help(message):
 /delete_account Удалить один из аккаунтов
 /role Узнать свою роль'''
 
-    id = message.from_user.id
+    id = str(message.from_user.id)
+    if is_admin(id):
+        commands += '''
+
+<b>Команды для админа:</b>
+/send_code_to_all_members Отправить игровой код всем участникам
+/show_members Вывести имя и id всех участников
+/add_member Добавить участника
+/kick_member Удалить участника по id или имени'''
+
     if is_super_user(id):
         commands += '''
 
@@ -163,8 +183,7 @@ def send_code(message, member_id):
     try:
         get_members()
         code = message.text.strip()
-        for id in members[member_id][IDS]:
-            bot.send_message(message.chat.id, f'{id} {code}: заглушка')
+        send_code_request(message, members[member_id], code)
     except Exception as e:
         bot.reply_to(message, 'oooops')
 
@@ -182,6 +201,92 @@ def add_account(message, member_id):
                 bot.send_message(message.chat.id, f'{account_id} добавлен', parse_mode="HTML")
         else:
             bot.reply_to(message, 'oooops')
+    except Exception as e:
+        bot.reply_to(message, 'oooops')
+
+# commands for admin
+@bot.message_handler(commands=['show_members'])
+def show_members(message):
+    if is_admin(str(message.from_user.id)):
+        get_members()
+        list_of_members = ""
+        for member_id, member in members.items():
+            list_of_members += f'<code>{member[NAME]}</code> id: <code>{member_id}</code> accounts: {(" ").join(member[IDS])}\n'
+        bot.send_message(message.chat.id, list_of_members, parse_mode="HTML")
+
+@bot.message_handler(commands=['add_member'])
+def add_member_command(message):
+    id = str(message.from_user.id)
+    if is_admin(id):
+        user_id = bot.reply_to(message, "Введи ID участника")
+        bot.register_next_step_handler(user_id, add_member_id)
+
+@bot.message_handler(commands=['kick_member'])
+def kick_member_command(message):
+    id = str(message.from_user.id)
+    if is_admin(id):
+        user_name_id = bot.reply_to(message, "Введи ID или имя")
+        bot.register_next_step_handler(user_name_id, kick_member)
+
+@bot.message_handler(commands=['send_code_to_all_members'])
+def send_code_to_all_members_command(message):
+    id = str(message.from_user.id)
+    if is_admin(id):
+        code = bot.reply_to(message, "Введи код")
+        bot.register_next_step_handler(code, send_code_to_all_members)
+
+def send_code_to_all_members(message):
+    try:
+        code = message.text.strip()
+        get_members()
+        for member in members.values():
+            send_code_request(message, member, code)
+    except Exception as e:
+        bot.reply_to(message, 'oooops')
+
+def kick_member(message):
+    try:
+        get_members()
+        name_or_id = message.text
+        is_found = False
+        if name_or_id in members:
+            members.pop(name_or_id, None)
+            update_members()
+            is_found = True
+        else:
+            for id, member in members.items():
+                if member[NAME] == name_or_id:
+                    members.pop(id, None)
+                    update_members()
+                    is_found = True
+                    break
+        if is_found:
+            bot.send_message(message.chat.id, f'Игрок {name_or_id} удален', parse_mode="HTML")
+        else:
+            bot.send_message(message.chat.id, f'Игрок {name_or_id} не найден', parse_mode="HTML")
+    except Exception as e:
+        bot.reply_to(message, 'oooops')
+
+def add_member_id(message):
+    try:
+        get_members()
+        id = message.text
+        if id in members:
+            bot.send_message(message.chat.id, f'Участник {id} уже добавлен под именем {members[id][NAME]}', parse_mode="HTML")
+        else:
+            member = bot.reply_to(message, "Введи имя (лучше на латинице)")
+            bot.register_next_step_handler(member, get_member_name, id)
+    except Exception as e:
+        bot.reply_to(message, 'oooops')
+
+def get_member_name(message, id):
+    try:
+        member_name = message.text
+        get_members()
+        # the check that this member already exists done on previous step
+        members.update({id: {ROLE: Role.MEMBER.value, NAME: member_name, IDS: []}})
+        update_members()
+        bot.send_message(message.chat.id, f'Участник {id}: {member_name} добавлен', parse_mode="HTML")
     except Exception as e:
         bot.reply_to(message, 'oooops')
 
