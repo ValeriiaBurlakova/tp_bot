@@ -46,7 +46,16 @@ def is_admin(id):
 def send_code_request(message, member, code):
     try:
         for id in member[IDS]:
-            bot.send_message(message.chat.id, f'{id} {code}: заглушка')
+            data = ('iggid={}&cdkey={}&username=&sign=0'.format(id, code)).encode('ascii')
+            req = request.Request(url='https://dut.igg.com/event/code', method='POST', data=data)
+
+            with request.urlopen(req) as f:
+                # result should have format {"code": %d, "msg": %s}
+                result = json.loads(f.read(100).decode('utf-8'))
+                bot.send_message(message.chat.id, '{0} {1}: {2}'.format(id, code, result['msg']))
+
+            # sleep 1-5 sec
+            time.sleep(random.uniform(1.0, 5.0))
     except Exception as e:
         bot.reply_to(message, 'oooops')
 
