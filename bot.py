@@ -277,7 +277,7 @@ def add_member_id(message):
         if id in members:
             bot.send_message(message.chat.id, f'Участник {id} уже добавлен под именем {members[id][NAME]}', parse_mode="HTML")
         else:
-            member = bot.reply_to(message, "Введи имя (лучше на латинице)")
+            member = bot.reply_to(message, "Введи имя (лучше на латинице и без пробелов)")
             bot.register_next_step_handler(member, get_member_name, id)
     except Exception as e:
         bot.reply_to(message, 'oooops')
